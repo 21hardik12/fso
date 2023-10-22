@@ -1,16 +1,18 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import personService from './services/persons'
 
-
-const Person = ({person}) => {
+const Person = ({person, handleDelete}) => {
   return (
-    <p>{person.name} {person.number}</p>
+    <>
+    <p>{person.name} {person.number} <button onClick={() => handleDelete(person)}>delete</button></p>       
+    </>
   )
 }
 
-const Persons = ({persons}) => {
+const Persons = ({persons, handleDelete}) => {
   return (
     <>
-    {persons.map(person => (<Person key={person.name} person={person}/>))}
+    {persons.map(person => (<Person handleDelete={handleDelete} key={person.name} person={person}/>))}
     </>
   )
 }
@@ -40,12 +42,13 @@ const PersonForm = ({name, number, handleName, handleNumber, handleSubmit}) => {
 }
 
 const App = () => {
-  const [persons, setPersons] = useState([
-    { name: 'Arto Hellas', number: '040-123456', id: 1 },
-    { name: 'Ada Lovelace', number: '39-44-5323523', id: 2 },
-    { name: 'Dan Abramov', number: '12-43-234345', id: 3 },
-    { name: 'Mary Poppendieck', number: '39-23-6423122', id: 4 }
-  ])
+  const [persons, setPersons] = useState([])
+
+  useEffect(() => {
+    personService.getAll().then(initialPersons => setPersons(initialPersons))
+  }, [])
+
+
   const [newName, setNewName] = useState('')
   const [newNumber, setNewNumber] = useState('');
   const [newSearchFilter, setNewSearchFilter] = useState('');  
@@ -62,24 +65,41 @@ const App = () => {
   const handleSubmit = (event) => {
     event.preventDefault();
     if (newName === '') return
-    const flag = persons.map(person => person.name).includes(newName);
-    if (flag) {
-      alert(`${newName} already exists in the phonebook`)
+    const foundPersonIdx = persons.findIndex(person => person.name.toLowerCase() === newName.toLowerCase())
+    if (foundPersonIdx > -1) {
+      if(window.confirm(`${newName} already exists in the phonebook. want to replace old number ?`)) {
+        personService.update({...persons[foundPersonIdx], number: newNumber})
+                     .then(response => setPersons(persons.toSpliced(foundPersonIdx, 1, response)))
+        setNewName('')
+        setNewNumber('')
+        return                
+      }
       setNewName('')
+      setNewNumber('')
       return
     }
     const newPerson = {
       name: newName,
       number: newNumber,
     }
-    setPersons(persons.concat(newPerson));
-    setNewName('');
-    setNewNumber('');
+    
+    personService.create(newPerson).then(response => {
+      setPersons(persons.concat(response))
+      setNewName('')
+      setNewNumber('')
+    })
   }
 
   const handleSearch = (e) => {
     const filter = e.target.value.toLowerCase();
     setNewSearchFilter(filter);
+  }
+
+  const handleDelete = (person) => {    
+    if (window.confirm(`Delete ${person.name}`)) 
+      personService.deletePerson(person.id).then(response => {
+        setPersons(persons.filter(_person => _person.id !== person.id))
+      })
   }
 
   return (
@@ -89,7 +109,7 @@ const App = () => {
       <h2>Add a new</h2>
       <PersonForm name={newName} number={newNumber} handleName={handleName} handleNumber={handleNumber} handleSubmit={handleSubmit} />
       <h2>Numbers</h2>
-      <Persons persons={persons.filter(person => person.name.toLowerCase().includes(newSearchFilter))} />
+      <Persons handleDelete={handleDelete} persons={persons.filter(person => person.name.toLowerCase().includes(newSearchFilter))} />
     </div>
   )
 }
